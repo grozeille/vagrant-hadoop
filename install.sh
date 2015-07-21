@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 DIR=/vagrant
 
 if [ ! -d $DIR/cache ]; then
@@ -59,7 +59,7 @@ function install_hadoop {
 	sysctl -w vm.swappiness=0 
 
 	download_and_untargz \
-		"http://mirrors.ircam.fr/pub/apache/hadoop/common/hadoop-2.6.0/hadoop-2.6.0.tar.gz" \
+		"https://archive.apache.org/dist/hadoop/common/hadoop-2.6.0/hadoop-2.6.0.tar.gz" \
 		hadoop-2.6.0.tar.gz \
 		/opt/hadoop
 
@@ -102,7 +102,7 @@ function install_hue {
 		hue-3.8.1.tgz \
 		/opt/hadoop
 
-	yum install -y ant asciidoc cyrus-sasl-devel cyrus-sasl-gssapi gcc gcc-c++ krb5-devel libxml2-devel libxslt-devel make mysql mysql-devel openldap-devel python-devel sqlite-devel openssl-devel gmp-devel cyrus-sasl-plain
+	yum install -y -d1 ant asciidoc cyrus-sasl-devel cyrus-sasl-gssapi gcc gcc-c++ krb5-devel libxml2-devel libxslt-devel make mysql mysql-devel openldap-devel python-devel sqlite-devel openssl-devel gmp-devel cyrus-sasl-plain
 
 	cd /opt/hadoop/hue-3.8.1	
 	make desktop
@@ -144,7 +144,7 @@ function install_hive {
 	fi
 
 	# install mysql first
-	yum install -y mysql-server
+	yum install -y -d1 mysql-server
 	/sbin/service mysqld start
 	chkconfig mysqld on
 	
@@ -161,7 +161,7 @@ function install_hive {
 	# install hive
 
 	download_and_untargz \
-		"http://wwwftp.ciril.fr/pub/apache/hive/stable/apache-hive-0.13.1-bin.tar.gz" \
+		"https://archive.apache.org/dist/hive/hive-0.13.1/apache-hive-0.13.1-bin.tar.gz" \
 		apache-hive-0.13.1-bin.tar.gz \
 		/opt/hadoop
 	
@@ -186,7 +186,7 @@ function install_hive {
 function install_zookeeper {
 	# zookeeper
 	download_and_untargz \
-		"http://wwwftp.ciril.fr/pub/apache/zookeeper/current/zookeeper-3.4.6.tar.gz" \
+		"https://archive.apache.org/dist/zookeeper/zookeeper-3.4.6/zookeeper-3.4.6.tar.gz" \
 		zookeeper-3.4.6.tar.gz \
 		/opt/hadoop
 
@@ -218,7 +218,7 @@ function install_drill {
 
 function install_hbase {
 	download_and_untargz \
-		"http://mirrors.ircam.fr/pub/apache/hbase/stable/hbase-1.0.1.1-bin.tar.gz" \
+		"http://apache.mirrors.ovh.net/ftp.apache.org/dist/hbase/1.0.1.1/hbase-1.0.1.1-bin.tar.gz" \
 		hbase-1.0.1.1-bin.tar.gz \
 		/opt/hadoop
 }
@@ -238,7 +238,7 @@ install_jdk
 install_hadoop
 install_hive
 #install_spark
-#install_hue
+install_hue
 #install_zookeeper
 #install_drill
 #install_hbase
