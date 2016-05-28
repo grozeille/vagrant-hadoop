@@ -5,6 +5,16 @@ if [ ! -d $DIR/cache ]; then
 	mkdir $DIR/cache
 fi
 
+function download {
+	if [ ! -f $DIR/cache/$2 ]; then
+		wget -nv "${@:4}" \
+		-O $DIR/cache/$2 \
+		$1
+	fi
+
+	cp $DIR/cache/$2 $3
+}
+
 function download_and_untargz {
 	if [ ! -f $DIR/cache/$2 ]; then
 		wget -nv "${@:4}" \
@@ -46,6 +56,37 @@ function install_jdk {
 	
 }
 
+function install_mysql {
+	if [ -d /usr/bin/mysql ]; then
+		exit
+	fi
+
+	# install mysql first
+	yum install -y -d1 mysql-server
+	/sbin/service mysqld start
+	chkconfig mysqld on
+	
+	echo "GRANT ALL ON *.* TO 'root'@'%';" > /tmp/init.sql
+	echo "FLUSH PRIVILEGES;" >> /tmp/init.sql
+	
+	mysql -u root < /tmp/init.sql
+
+}
+
+function install_python {
+
+	download \
+		"http://repo.continuum.io/archive/Anaconda2-4.0.0-Linux-x86_64.sh" \
+		Anaconda2-4.0.0-Linux-x86_64.sh \
+		/opt/
+
+	chmod +x /opt/Anaconda2-4.0.0-Linux-x86_64.sh
+	/opt/Anaconda2-4.0.0-Linux-x86_64.sh -b -p /opt/anaconda
+
+	echo 'export PYTHON_HOME=/opt/anaconda' >> /etc/bashrc
+	echo 'export PATH=$PATH:$PYTHON_HOME/bin' >> /etc/bashrc
+	source /etc/bashrc
+}
 
 function install_hadoop {
 	if [ -d /opt/hadoop/hadoop-2.6.0 ]; then
@@ -54,6 +95,7 @@ function install_hadoop {
 	echo "install hadoop"
 
 	# install hadoop
+	chmod +x $DIR/setup-ssh.sh
 	sudo -u vagrant $DIR/setup-ssh.sh
 
 	sysctl -w vm.swappiness=0 
@@ -65,6 +107,7 @@ function install_hadoop {
 
 	echo 'export HADOOP_HOME=/opt/hadoop/hadoop-2.6.0' >> /etc/bashrc
 	echo 'export PATH=$PATH:/opt/hadoop/hadoop-2.6.0/bin' >> /etc/bashrc
+	echo 'export HADOOP_CONF_DIR=/opt/hadoop/hadoop-2.6.0/etc/hadoop/' >> /etc/bashrc
 	source /etc/bashrc
 
 	mkdir /opt/hadoop/data
@@ -83,13 +126,14 @@ function install_hadoop {
 	# autorized IP ?
 
 	chown -R vagrant:vagrant $HADOOP_HOME
+	chmod +x $DIR/start-hadoop.sh
 	sudo -u vagrant $DIR/start-hadoop.sh
 }
 
 function install_hue {
 	# install hue
 	download_and_untargz \
-		"http://apache.mirrors.ovh.net/ftp.apache.org/dist/maven/maven-3/3.3.3/binaries/apache-maven-3.3.3-bin.tar.gz" \
+		"http://archive.apache.org/dist/maven/maven-3//3.3.3/binaries/apache-maven-3.3.3-bin.tar.gz" \
 		apache-maven-3.3.3-bin.tar.gz \
 		/opt
 
@@ -97,36 +141,60 @@ function install_hue {
 	echo 'export PATH=$PATH:/opt/apache-maven-3.3.3/bin' >> /etc/bashrc
 	source /etc/bashrc
 
+#"http://gethue.com/downloads/hue-3.10.0.tgz" \
+		
 	download_and_untargz \
-		"https://dl.dropboxusercontent.com/u/730827/hue/releases/3.8.1/hue-3.8.1.tgz" \
-		hue-3.8.1.tgz \
+		"https://dl.dropboxusercontent.com/u/730827/hue/releases/3.10.0/hue-3.10.0.tgz" \
+		hue-3.10.0.tgz \
 		/opt/hadoop
 
-	yum install -y -d1 ant asciidoc cyrus-sasl-devel cyrus-sasl-gssapi gcc gcc-c++ krb5-devel libxml2-devel libxslt-devel make mysql mysql-devel openldap-devel python-devel sqlite-devel openssl-devel gmp-devel cyrus-sasl-plain
+	yum install -y -d1 ant asciidoc cyrus-sasl-devel cyrus-sasl-gssapi gcc gcc-c++ krb5-devel libxml2-devel libxslt-devel make mysql mysql-devel openldap-devel python-devel sqlite-devel openssl-devel gmp-devel cyrus-sasl-plain libffi-devel
 
-	cd /opt/hadoop/hue-3.8.1	
+	cd /opt/hadoop/hue-3.10.0	
 	make desktop
 	make apps
 	make install PREFIX=/opt/hadoop
 
-	useradd hue
-
 	cat $DIR/conf/hue.ini > /opt/hadoop/hue/desktop/conf/hue.ini
 
+	# configure mysql
+	echo "CREATE USER 'hue'@'%' IDENTIFIED BY 'hue';" > /tmp/init_hue.sql
+	echo "CREATE USER 'hue'@'localhost' IDENTIFIED BY 'hue';" >> /tmp/init_hue.sql
+	echo "CREATE USER 'hue'@'hadoop' IDENTIFIED BY 'hue';" >> /tmp/init_hue.sql
+	echo "CREATE DATABASE hue;" >> /tmp/init_hue.sql
+	echo "GRANT ALL ON hue.* TO 'hue'@'%';" >> /tmp/init_hue.sql
+	echo "FLUSH PRIVILEGES;" >> /tmp/init_hue.sql
+	
+	mysql -u root < /tmp/init_hue.sql
+
+	sudo -u vagrant /opt/hadoop/hue/build/env/bin/hue syncdb --noinput
+	sudo -u vagrant /opt/hadoop/hue/build/env/bin/hue migrate --noinput
+	
+	echo "from django.contrib.auth.models import User" > /tmp/create_hue_user.py 
+	echo "a = User.objects.get(username='vagrant')" >> /tmp/create_hue_user.py 
+	echo "a.is_staff = True" >> /tmp/create_hue_user.py 
+	echo "a.is_superuser = True" >> /tmp/create_hue_user.py 
+	echo "a.set_password('vagrant')" >> /tmp/create_hue_user.py 
+	echo "a.save()" >> /tmp/create_hue_user.py 
+
+	sudo -u vagrant bash -c '/opt/hadoop/hue/build/env/bin/hue shell < /tmp/create_hue_user.py'
+
+	chown -R vagrant:vagrant /opt/hadoop/hue
 	cd /opt/hadoop/hue
-	build/env/bin/supervisor &
+	sudo -u vagrant build/env/bin/supervisor &
 	#build/env/bin/hue livy_server > logs/livy.out & 
 }
 
 function install_spark {
 	# spark
 	download_and_untargz \
-		"http://d3kbcqa49mib13.cloudfront.net/spark-1.4.0-bin-hadoop2.6.tgz" \
-		spark-1.4.0-bin-hadoop2.6.tgz \
+		"http://archive.apache.org/dist/spark/spark-1.6.1/spark-1.6.1-bin-hadoop2.6.tgz" \
+		spark-1.6.1-bin-hadoop2.6.tgz \
 		/opt/hadoop
 
-	echo 'export SPARK_HOME=/opt/hadoop/spark-1.4.0-bin-hadoop2.6' >> /etc/bashrc
+	echo 'export SPARK_HOME=/opt/hadoop/spark-1.6.1-bin-hadoop2.6' >> /etc/bashrc
 	echo 'export PATH=$PATH:$SPARK_HOME/bin' >> /etc/bashrc
+	echo 'export PYSPARK_PYTHON=$PYTHON_HOME' >> /etc/bashrc
 	echo 'export PYTHONPATH="$SPARK_HOME/python/:$PYTHONPATH"' >> /etc/bashrc
 	echo 'export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH"' >> /etc/bashrc
 	source /etc/bashrc
@@ -139,39 +207,33 @@ function install_spark {
 }
 
 function install_hive {
-	if [ -d /opt/hadoop/apache-hive-0.13.1-bin ]; then
+	if [ -d /opt/hadoop/apache-hive-1.2.1-bin ]; then
 		exit
 	fi
 
-	# install mysql first
-	yum install -y -d1 mysql-server
-	/sbin/service mysqld start
-	chkconfig mysqld on
+	echo "CREATE USER 'hive'@'%' IDENTIFIED BY 'hive';" > /tmp/init_hive.sql
+	echo "CREATE USER 'hive'@'localhost' IDENTIFIED BY 'hive';" >> /tmp/init_hive.sql
+	echo "CREATE USER 'hive'@'hadoop' IDENTIFIED BY 'hive';" >> /tmp/init_hive.sql
+	echo "CREATE DATABASE hive;" >> /tmp/init_hive.sql
+	echo "GRANT ALL ON hive.* TO 'hive'@'%';" >> /tmp/init_hive.sql
+	echo "FLUSH PRIVILEGES;" >> /tmp/init_hive.sql
 	
-	echo "GRANT ALL ON *.* TO 'root'@'%';" > /tmp/init.sql
-	echo "CREATE USER 'hive'@'%' IDENTIFIED BY 'hive';" >> /tmp/init.sql
-	echo "CREATE USER 'hive'@'localhost' IDENTIFIED BY 'hive';" >> /tmp/init.sql
-	echo "CREATE USER 'hive'@'hadoop' IDENTIFIED BY 'hive';" >> /tmp/init.sql
-	echo "CREATE DATABASE hive;" >> /tmp/init.sql
-	echo "GRANT ALL ON hive.* TO 'hive'@'%';" >> /tmp/init.sql
-	echo "FLUSH PRIVILEGES;" >> /tmp/init.sql
-	
-	mysql -u root < /tmp/init.sql
+	mysql -u root < /tmp/init_hive.sql
 
 	# install hive
 
 	download_and_untargz \
-		"https://archive.apache.org/dist/hive/hive-0.13.1/apache-hive-0.13.1-bin.tar.gz" \
-		apache-hive-0.13.1-bin.tar.gz \
+		"https://archive.apache.org/dist/hive/hive-1.2.1/apache-hive-1.2.1-bin.tar.gz" \
+		apache-hive-1.2.1-bin.tar.gz \
 		/opt/hadoop
 	
 	download_and_untargz \
 		"http://cdn.mysql.com/Downloads/Connector-J/mysql-connector-java-5.0.8.tar.gz" \
 		mysql-connector-java-5.0.8.tar.gz \
 		/opt/hadoop
-	cp /opt/hadoop/mysql-connector-java-5.0.8/mysql-connector-java-5.0.8-bin.jar /opt/hadoop/apache-hive-0.13.1-bin/lib/
+	cp /opt/hadoop/mysql-connector-java-5.0.8/mysql-connector-java-5.0.8-bin.jar /opt/hadoop/apache-hive-1.2.1-bin/lib/
 
-	echo 'export HIVE_HOME=/opt/hadoop/apache-hive-0.13.1-bin/' >> /etc/bashrc
+	echo 'export HIVE_HOME=/opt/hadoop/apache-hive-1.2.1-bin/' >> /etc/bashrc
 	echo 'export PATH=$PATH:$HIVE_HOME/bin' >> /etc/bashrc
 	source /etc/bashrc
 
@@ -180,6 +242,7 @@ function install_hive {
 	cd $HIVE_HOME
 	mkdir logs
 	chown -R vagrant:vagrant $HIVE_HOME
+	chmod +x $DIR/start-hive.sh
 	sudo -u vagrant $DIR/start-hive.sh
 }
 
@@ -218,8 +281,8 @@ function install_drill {
 
 function install_hbase {
 	download_and_untargz \
-		"http://apache.mirrors.ovh.net/ftp.apache.org/dist/hbase/1.0.1.1/hbase-1.0.1.1-bin.tar.gz" \
-		hbase-1.0.1.1-bin.tar.gz \
+		"http://archive.apache.org/dist/hbase/1.1.2/hbase-1.1.2-bin.tar.gz" \
+		hbase-1.1.2-bin.tar.gz \
 		/opt/hadoop
 }
 
@@ -236,8 +299,10 @@ yum install -y -d1 wget
 
 install_jdk
 install_hadoop
+install_mysql
 install_hive
-#install_spark
+install_python
+install_spark
 install_hue
 #install_zookeeper
 #install_drill
