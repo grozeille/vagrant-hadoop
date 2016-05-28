@@ -105,9 +105,31 @@ function install_hadoop {
 		hadoop-2.6.0.tar.gz \
 		/opt/hadoop
 
-	echo 'export HADOOP_HOME=/opt/hadoop/hadoop-2.6.0' >> /etc/bashrc
-	echo 'export PATH=$PATH:/opt/hadoop/hadoop-2.6.0/bin' >> /etc/bashrc
-	echo 'export HADOOP_CONF_DIR=/opt/hadoop/hadoop-2.6.0/etc/hadoop/' >> /etc/bashrc
+	ln -s /opt/hadoop/hadoop-2.6.0/ /opt/hadoop/hadoop
+
+	download_and_untargz \
+		"https://archive.apache.org/dist/tez/0.7.1/apache-tez-0.7.1-bin.tar.gz" \
+		apache-tez-0.7.1-bin.tar.gz \
+		/opt/hadoop
+
+	ln -s /opt/hadoop/apache-tez-0.7.1-bin/ /opt/hadoop/tez
+
+	# tez ui
+	download_and_untargz \
+		"http://archive.apache.org/dist/tomcat/tomcat-8/v8.5.2/bin/apache-tomcat-8.5.2.tar.gz" \
+		apache-tomcat-8.5.2.tar.gz \
+		/opt/hadoop/tez
+
+	mkdir /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui
+	unzip /opt/hadoop/tez/tez-ui-0.7.1.war -d /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui
+	cat $DIR/conf/server.xml > /opt/hadoop/tez/apache-tomcat-8.5.2/conf/server.xml
+	cat $DIR/conf/config.js > /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui/scripts/config.js
+
+
+	echo 'export HADOOP_HOME=/opt/hadoop/hadoop' >> /etc/bashrc
+	echo 'export PATH=$PATH:/opt/hadoop/hadoop/bin' >> /etc/bashrc
+	echo 'export HADOOP_CONF_DIR=/opt/hadoop/hadoop/etc/hadoop' >> /etc/bashrc
+	echo 'export TEZ_HOME=/opt/hadoop/tez' >> /etc/bashrc
 	source /etc/bashrc
 
 	mkdir /opt/hadoop/data
@@ -117,15 +139,21 @@ function install_hadoop {
 
 	cat $DIR/conf/core-site.xml > $HADOOP_HOME/etc/hadoop/core-site.xml
 
+	cat $DIR/conf/hadoop-env.sh > $HADOOP_HOME/etc/hadoop/hadoop-env.sh
+
 	cat $DIR/conf/httpfs-site.xml > $HADOOP_HOME/etc/hadoop/httpfs-site.xml
 
 	cat $DIR/conf/yarn-site.xml > $HADOOP_HOME/etc/hadoop/yarn-site.xml
 
 	cat $DIR/conf/mapred-site.xml > $HADOOP_HOME/etc/hadoop/mapred-site.xml
 
-	# autorized IP ?
+	mkdir $TEZ_HOME/conf
+	cat $DIR/conf/tez-site.xml > $TEZ_HOME/conf/tez-site.xml
 
-	chown -R vagrant:vagrant $HADOOP_HOME
+	chown -R vagrant:vagrant /opt/hadoop/hadoop-2.6.0/
+	chown -R vagrant:vagrant /opt/hadoop/apache-tez-0.7.1-bin/
+	chown -R vagrant:vagrant /opt/hadoop/apache-tomcat-8.5.2/
+
 	chmod +x $DIR/start-hadoop.sh
 	sudo -u vagrant $DIR/start-hadoop.sh
 }
@@ -167,6 +195,8 @@ function install_hue {
 	
 	mysql -u root < /tmp/init_hue.sql
 
+	chown -R vagrant:vagrant /opt/hadoop/hue
+
 	sudo -u vagrant /opt/hadoop/hue/build/env/bin/hue syncdb --noinput
 	sudo -u vagrant /opt/hadoop/hue/build/env/bin/hue migrate --noinput
 	
@@ -179,7 +209,6 @@ function install_hue {
 
 	sudo -u vagrant bash -c '/opt/hadoop/hue/build/env/bin/hue shell < /tmp/create_hue_user.py'
 
-	chown -R vagrant:vagrant /opt/hadoop/hue
 	cd /opt/hadoop/hue
 	sudo -u vagrant build/env/bin/supervisor &
 	#build/env/bin/hue livy_server > logs/livy.out & 
@@ -192,11 +221,13 @@ function install_spark {
 		spark-1.6.1-bin-hadoop2.6.tgz \
 		/opt/hadoop
 
-	echo 'export SPARK_HOME=/opt/hadoop/spark-1.6.1-bin-hadoop2.6' >> /etc/bashrc
+	ln -s /opt/hadoop/spark-1.6.1-bin-hadoop2.6/ /opt/hadoop/spark
+
+	echo 'export SPARK_HOME=/opt/hadoop/spark' >> /etc/bashrc
 	echo 'export PATH=$PATH:$SPARK_HOME/bin' >> /etc/bashrc
 	echo 'export PYSPARK_PYTHON=$PYTHON_HOME' >> /etc/bashrc
 	echo 'export PYTHONPATH="$SPARK_HOME/python/:$PYTHONPATH"' >> /etc/bashrc
-	echo 'export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH"' >> /etc/bashrc
+	echo 'export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.9-src.zip:$PYTHONPATH"' >> /etc/bashrc
 	source /etc/bashrc
 
 	cat $DIR/conf/spark-env.sh > $SPARK_HOME/conf/spark-env.sh
@@ -204,6 +235,8 @@ function install_spark {
 	if [ -z "$HIVE_HOME" ]; then
 		ln -s $SPARK_HOME/conf/hive-site.xml $HIVE_HOME/conf/hive-site.xml
 	fi
+
+	chown -R vagrant:vagrant /opt/hadoop/spark-1.6.1-bin-hadoop2.6/
 }
 
 function install_hive {
@@ -226,6 +259,8 @@ function install_hive {
 		"https://archive.apache.org/dist/hive/hive-1.2.1/apache-hive-1.2.1-bin.tar.gz" \
 		apache-hive-1.2.1-bin.tar.gz \
 		/opt/hadoop
+
+	ln -s /opt/hadoop/apache-hive-1.2.1-bin/ /opt/hadoop/hive
 	
 	download_and_untargz \
 		"http://cdn.mysql.com/Downloads/Connector-J/mysql-connector-java-5.0.8.tar.gz" \
@@ -233,7 +268,7 @@ function install_hive {
 		/opt/hadoop
 	cp /opt/hadoop/mysql-connector-java-5.0.8/mysql-connector-java-5.0.8-bin.jar /opt/hadoop/apache-hive-1.2.1-bin/lib/
 
-	echo 'export HIVE_HOME=/opt/hadoop/apache-hive-1.2.1-bin/' >> /etc/bashrc
+	echo 'export HIVE_HOME=/opt/hadoop/hive/' >> /etc/bashrc
 	echo 'export PATH=$PATH:$HIVE_HOME/bin' >> /etc/bashrc
 	source /etc/bashrc
 
@@ -241,7 +276,7 @@ function install_hive {
 
 	cd $HIVE_HOME
 	mkdir logs
-	chown -R vagrant:vagrant $HIVE_HOME
+	chown -R vagrant:vagrant /opt/hadoop/apache-hive-1.2.1-bin
 	chmod +x $DIR/start-hive.sh
 	sudo -u vagrant $DIR/start-hive.sh
 }
@@ -303,7 +338,7 @@ install_mysql
 install_hive
 install_python
 install_spark
-install_hue
+#install_hue
 #install_zookeeper
 #install_drill
 #install_hbase
