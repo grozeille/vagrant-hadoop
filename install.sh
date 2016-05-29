@@ -61,8 +61,11 @@ function install_mysql {
 		exit
 	fi
 
-	# install mysql first
 	yum install -y -d1 mysql-server
+
+	# set InnoDB as default engine
+	cat $DIR/conf/mysql/my.cnf > /etc/my.cnf
+
 	/sbin/service mysqld start
 	chkconfig mysqld on
 	
@@ -122,8 +125,8 @@ function install_hadoop {
 
 	mkdir /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui
 	unzip /opt/hadoop/tez/tez-ui-0.7.1.war -d /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui
-	cat $DIR/conf/server.xml > /opt/hadoop/tez/apache-tomcat-8.5.2/conf/server.xml
-	cat $DIR/conf/config.js > /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui/scripts/config.js
+	cat $DIR/conf/hadoop/server.xml > /opt/hadoop/tez/apache-tomcat-8.5.2/conf/server.xml
+	cat $DIR/conf/hadoop/config.js > /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui/scripts/config.js
 
 
 	echo 'export HADOOP_HOME=/opt/hadoop/hadoop' >> /etc/bashrc
@@ -135,20 +138,20 @@ function install_hadoop {
 	mkdir /opt/hadoop/data
 	chmod a+w /opt/hadoop/data
 
-	cat $DIR/conf/hdfs-site.xml > $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+	cat $DIR/conf/hadoop/hdfs-site.xml > $HADOOP_HOME/etc/hadoop/hdfs-site.xml
 
-	cat $DIR/conf/core-site.xml > $HADOOP_HOME/etc/hadoop/core-site.xml
+	cat $DIR/conf/hadoop/core-site.xml > $HADOOP_HOME/etc/hadoop/core-site.xml
 
-	cat $DIR/conf/hadoop-env.sh > $HADOOP_HOME/etc/hadoop/hadoop-env.sh
+	cat $DIR/conf/hadoop/hadoop-env.sh > $HADOOP_HOME/etc/hadoop/hadoop-env.sh
 
-	cat $DIR/conf/httpfs-site.xml > $HADOOP_HOME/etc/hadoop/httpfs-site.xml
+	cat $DIR/conf/hadoop/httpfs-site.xml > $HADOOP_HOME/etc/hadoop/httpfs-site.xml
 
-	cat $DIR/conf/yarn-site.xml > $HADOOP_HOME/etc/hadoop/yarn-site.xml
+	cat $DIR/conf/hadoop/yarn-site.xml > $HADOOP_HOME/etc/hadoop/yarn-site.xml
 
-	cat $DIR/conf/mapred-site.xml > $HADOOP_HOME/etc/hadoop/mapred-site.xml
+	cat $DIR/conf/hadoop/mapred-site.xml > $HADOOP_HOME/etc/hadoop/mapred-site.xml
 
 	mkdir $TEZ_HOME/conf
-	cat $DIR/conf/tez-site.xml > $TEZ_HOME/conf/tez-site.xml
+	cat $DIR/conf/hadoop/tez-site.xml > $TEZ_HOME/conf/tez-site.xml
 
 	chown -R vagrant:vagrant /opt/hadoop/hadoop-2.6.0/
 	chown -R vagrant:vagrant /opt/hadoop/apache-tez-0.7.1-bin/
@@ -169,8 +172,6 @@ function install_hue {
 	echo 'export PATH=$PATH:/opt/apache-maven-3.3.3/bin' >> /etc/bashrc
 	source /etc/bashrc
 
-#"http://gethue.com/downloads/hue-3.10.0.tgz" \
-		
 	download_and_untargz \
 		"https://dl.dropboxusercontent.com/u/730827/hue/releases/3.10.0/hue-3.10.0.tgz" \
 		hue-3.10.0.tgz \
@@ -183,7 +184,7 @@ function install_hue {
 	make apps
 	make install PREFIX=/opt/hadoop
 
-	cat $DIR/conf/hue.ini > /opt/hadoop/hue/desktop/conf/hue.ini
+	cat $DIR/conf/hue/hue.ini > /opt/hadoop/hue/desktop/conf/hue.ini
 
 	# configure mysql
 	echo "CREATE USER 'hue'@'%' IDENTIFIED BY 'hue';" > /tmp/init_hue.sql
@@ -191,15 +192,25 @@ function install_hue {
 	echo "CREATE USER 'hue'@'hadoop' IDENTIFIED BY 'hue';" >> /tmp/init_hue.sql
 	echo "CREATE DATABASE hue;" >> /tmp/init_hue.sql
 	echo "GRANT ALL ON hue.* TO 'hue'@'%';" >> /tmp/init_hue.sql
+
+	echo "CREATE USER 'hue_sample'@'%' IDENTIFIED BY 'hue_sample';" >> /tmp/init_hue.sql
+	echo "CREATE USER 'hue_sample'@'localhost' IDENTIFIED BY 'hue_sample';" >> /tmp/init_hue.sql
+	echo "CREATE USER 'hue_sample'@'hadoop' IDENTIFIED BY 'hue_sample';" >> /tmp/init_hue.sql
+	echo "CREATE DATABASE hue_sample;" >> /tmp/init_hue.sql
+	echo "GRANT ALL ON hue_sample.* TO 'hue_sample'@'%';" >> /tmp/init_hue.sql
+
 	echo "FLUSH PRIVILEGES;" >> /tmp/init_hue.sql
 	
 	mysql -u root < /tmp/init_hue.sql
 
 	chown -R vagrant:vagrant /opt/hadoop/hue
 
-	sudo -u vagrant /opt/hadoop/hue/build/env/bin/hue syncdb --noinput
-	sudo -u vagrant /opt/hadoop/hue/build/env/bin/hue migrate --noinput
+	cd /opt/hadoop/hue/
+	sudo -u vagrant build/env/bin/hue syncdb --noinput
+	sudo -u vagrant build/env/bin/hue migrate --noinput
 	
+	sudo -u vagrant build/env/bin/hue  createsuperuser --username=vagrant --email=vagrant@hadoop.local --noinput
+
 	echo "from django.contrib.auth.models import User" > /tmp/create_hue_user.py 
 	echo "a = User.objects.get(username='vagrant')" >> /tmp/create_hue_user.py 
 	echo "a.is_staff = True" >> /tmp/create_hue_user.py 
@@ -207,11 +218,10 @@ function install_hue {
 	echo "a.set_password('vagrant')" >> /tmp/create_hue_user.py 
 	echo "a.save()" >> /tmp/create_hue_user.py 
 
-	sudo -u vagrant bash -c '/opt/hadoop/hue/build/env/bin/hue shell < /tmp/create_hue_user.py'
+	sudo -u vagrant bash -c 'build/env/bin/hue shell < /tmp/create_hue_user.py'
 
-	cd /opt/hadoop/hue
-	sudo -u vagrant build/env/bin/supervisor &
-	#build/env/bin/hue livy_server > logs/livy.out & 
+	chmod +x $DIR/start-hue.sh
+	sudo -u vagrant $DIR/start-hue.sh
 }
 
 function install_spark {
@@ -225,15 +235,15 @@ function install_spark {
 
 	echo 'export SPARK_HOME=/opt/hadoop/spark' >> /etc/bashrc
 	echo 'export PATH=$PATH:$SPARK_HOME/bin' >> /etc/bashrc
-	echo 'export PYSPARK_PYTHON=$PYTHON_HOME' >> /etc/bashrc
+	echo 'export PYSPARK_PYTHON=$PYTHON_HOME/bin/python' >> /etc/bashrc
 	echo 'export PYTHONPATH="$SPARK_HOME/python/:$PYTHONPATH"' >> /etc/bashrc
 	echo 'export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.9-src.zip:$PYTHONPATH"' >> /etc/bashrc
 	source /etc/bashrc
 
-	cat $DIR/conf/spark-env.sh > $SPARK_HOME/conf/spark-env.sh
+	cat $DIR/conf/spark/spark-env.sh > $SPARK_HOME/conf/spark-env.sh
 
 	if [ -z "$HIVE_HOME" ]; then
-		ln -s $SPARK_HOME/conf/hive-site.xml $HIVE_HOME/conf/hive-site.xml
+		cat $DIR/conf/spark/hive-site.xml > $SPARK_HOME/conf/hive-site.xml
 	fi
 
 	chown -R vagrant:vagrant /opt/hadoop/spark-1.6.1-bin-hadoop2.6/
@@ -272,7 +282,7 @@ function install_hive {
 	echo 'export PATH=$PATH:$HIVE_HOME/bin' >> /etc/bashrc
 	source /etc/bashrc
 
-	cat $DIR/conf/hive-site.xml > $HIVE_HOME/conf/hive-site.xml
+	cat $DIR/conf/hive/hive-site.xml > $HIVE_HOME/conf/hive-site.xml
 
 	cd $HIVE_HOME
 	mkdir logs
@@ -292,7 +302,7 @@ function install_zookeeper {
 
 	mkdir data
 
-	cat $DIR/conf/zoo.cfg > conf/zoo.cfg
+	cat $DIR/conf/zookeeper/zoo.cfg > conf/zoo.cfg
 	echo '1' > data/myid
 
 	bin/zkServer.sh start
@@ -307,9 +317,9 @@ function install_drill {
 
 	cd /opt/hadoop/apache-drill-1.1.0
 
-	cat $DIR/conf/drill-env.sh > conf/drill-env.sh
+	cat $DIR/conf/drill/drill-env.sh > conf/drill-env.sh
 
-	cat $DIR/conf/drill-override.conf > conf/drill-override.conf
+	cat $DIR/conf/drill/drill-override.conf > conf/drill-override.conf
 
 	bin/drillbit.sh start
 }
@@ -338,7 +348,10 @@ install_mysql
 install_hive
 install_python
 install_spark
-#install_hue
+install_hue
 #install_zookeeper
 #install_drill
 #install_hbase
+
+# add samples
+sudo -u vagrant $DIR/samples/run.sh

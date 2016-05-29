@@ -17,6 +17,4 @@ CREATE TABLE IF NOT EXISTS rht_quotes_orc
     AS
     SELECT `date`, open, high, low, close, volume, adj_close FROM rht_quotes;
 
-select year(`date`) as year, month(`date`) as month, avg(adj_close) as avg_adj_close 
-from rht_quotes 
-group by year(`date`), month(`date`);
+select year(`date`) as year, month(`date`) as month, avg(adj_close) as avg_adj_close from rht_quotes group by year(`date`), month(`date`);
