@@ -51,3 +51,6 @@
 # - SPARK_NICENESS      The scheduling priority for daemons. (Default: 0)
 
 HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+PYSPARK_PYTHON=$PYTHON_HOME/bin/python
+PYSPARK_DRIVER_PYTHON=$PYTHON_HOME/bin/python
+PYTHONPATH="$SPARK_HOME/python/:$SPARK_HOME/python/lib/py4j-0.9-src.zip:$PYTHONPATH"

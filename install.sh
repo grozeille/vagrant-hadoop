@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 DIR=/vagrant
 
 if [ ! -d $DIR/cache ]; then
@@ -27,7 +27,7 @@ function download_and_untargz {
 
 function install_jdk {
 	if [ -d /opt/jdk1.8.0_45 ]; then
-		exit
+		return
 	fi
 	echo "install jdk"
 
@@ -58,7 +58,7 @@ function install_jdk {
 
 function install_mysql {
 	if [ -d /usr/bin/mysql ]; then
-		exit
+		return
 	fi
 
 	yum install -y -d1 mysql-server
@@ -77,6 +77,9 @@ function install_mysql {
 }
 
 function install_python {
+	if [ -d /opt/anaconda ]; then
+		return
+	fi
 
 	download \
 		"http://repo.continuum.io/archive/Anaconda2-4.0.0-Linux-x86_64.sh" \
@@ -91,9 +94,15 @@ function install_python {
 	source /etc/bashrc
 }
 
+function start_hadoop {
+	chmod +x $DIR/start-hadoop.sh
+	sudo -u vagrant $DIR/start-hadoop.sh
+}
+
 function install_hadoop {
 	if [ -d /opt/hadoop/hadoop-2.6.0 ]; then
-		exit
+		start_hadoop
+		return
 	fi
 	echo "install hadoop"
 
@@ -157,11 +166,23 @@ function install_hadoop {
 	chown -R vagrant:vagrant /opt/hadoop/apache-tez-0.7.1-bin/
 	chown -R vagrant:vagrant /opt/hadoop/apache-tomcat-8.5.2/
 
-	chmod +x $DIR/start-hadoop.sh
-	sudo -u vagrant $DIR/start-hadoop.sh
+	sudo -u vagrant bash -c 'source /etc/bashrc; hadoop namenode -format'
+
+	start_hadoop
+}
+
+function start_hue {
+	chmod +x $DIR/start-hue.sh
+	sudo -u vagrant $DIR/start-hue.sh
 }
 
 function install_hue {
+	if [ -d /opt/hadoop/hue ]; then
+		start_hue
+		return
+	fi
+
+	echo "install HUE"
 	# install hue
 	download_and_untargz \
 		"http://archive.apache.org/dist/maven/maven-3//3.3.3/binaries/apache-maven-3.3.3-bin.tar.gz" \
@@ -179,8 +200,10 @@ function install_hue {
 
 	yum install -y -d1 ant asciidoc cyrus-sasl-devel cyrus-sasl-gssapi gcc gcc-c++ krb5-devel libxml2-devel libxslt-devel make mysql mysql-devel openldap-devel python-devel sqlite-devel openssl-devel gmp-devel cyrus-sasl-plain libffi-devel
 
-	cd /opt/hadoop/hue-3.10.0	
+	cd /opt/hadoop/hue-3.10.0
 	make desktop
+	# bug fix: too short timeout for starting spark session
+	#cat $DIR/conf/hue/SessionServlet.scala > /opt/hadoop/hue-3.10.0/apps/spark/java/livy-server/src/main/scala/com/cloudera/hue/livy/server/SessionServlet.scala
 	make apps
 	make install PREFIX=/opt/hadoop
 
@@ -220,11 +243,36 @@ function install_hue {
 
 	sudo -u vagrant bash -c 'build/env/bin/hue shell < /tmp/create_hue_user.py'
 
-	chmod +x $DIR/start-hue.sh
-	sudo -u vagrant $DIR/start-hue.sh
+	# install livy
+	download_and_untargz \
+		"https://github.com/cloudera/livy/archive/v0.2.0.tar.gz" \
+		v0.2.0.tar.gz \
+		/opt/hadoop
+
+	ln -s /opt/hadoop/livy-0.2.0/ /opt/hadoop/livy
+
+	cd /opt/hadoop/livy
+	mvn -Dspark.version=1.6.1 package -Dmaven.test.skip=true
+
+	cat $DIR/conf/hue/livy.conf > /opt/hadoop/livy/conf/livy.conf
+
+	chown -R vagrant:vagrant /opt/hadoop/livy-0.2.0/
+
+	start_hue
+}
+
+function start_spark {
+	chmod +x $DIR/start-spark.sh
+	sudo -u vagrant $DIR/start-spark.sh
 }
 
 function install_spark {
+	if [ -d /opt/hadoop/spark-1.6.1-bin-hadoop2.6/ ]; then
+		start_spark
+		return
+	fi
+	echo "install spark"
+
 	# spark
 	download_and_untargz \
 		"http://archive.apache.org/dist/spark/spark-1.6.1/spark-1.6.1-bin-hadoop2.6.tgz" \
@@ -236,23 +284,33 @@ function install_spark {
 	echo 'export SPARK_HOME=/opt/hadoop/spark' >> /etc/bashrc
 	echo 'export PATH=$PATH:$SPARK_HOME/bin' >> /etc/bashrc
 	echo 'export PYSPARK_PYTHON=$PYTHON_HOME/bin/python' >> /etc/bashrc
-	echo 'export PYTHONPATH="$SPARK_HOME/python/:$PYTHONPATH"' >> /etc/bashrc
-	echo 'export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.9-src.zip:$PYTHONPATH"' >> /etc/bashrc
+	echo 'export PYSPARK_DRIVER_PYTHON=$PYTHON_HOME/bin/python' >> /etc/bashrc
+	echo 'export PYTHONPATH="$SPARK_HOME/python/:$SPARK_HOME/python/lib/py4j-0.9-src.zip:$PYTHONPATH"' >> /etc/bashrc
 	source /etc/bashrc
 
 	cat $DIR/conf/spark/spark-env.sh > $SPARK_HOME/conf/spark-env.sh
 
-	if [ -z "$HIVE_HOME" ]; then
+	if [ -d "$HIVE_HOME" ]; then
 		cat $DIR/conf/spark/hive-site.xml > $SPARK_HOME/conf/hive-site.xml
 	fi
 
 	chown -R vagrant:vagrant /opt/hadoop/spark-1.6.1-bin-hadoop2.6/
+
+	start_spark
+}
+
+function start_hive {
+	chmod +x $DIR/start-hive.sh
+	sudo -u vagrant $DIR/start-hive.sh
 }
 
 function install_hive {
 	if [ -d /opt/hadoop/apache-hive-1.2.1-bin ]; then
-		exit
+		start_hive
+		return
 	fi
+
+	echo "install hive"
 
 	echo "CREATE USER 'hive'@'%' IDENTIFIED BY 'hive';" > /tmp/init_hive.sql
 	echo "CREATE USER 'hive'@'localhost' IDENTIFIED BY 'hive';" >> /tmp/init_hive.sql
@@ -279,6 +337,7 @@ function install_hive {
 	cp /opt/hadoop/mysql-connector-java-5.0.8/mysql-connector-java-5.0.8-bin.jar /opt/hadoop/apache-hive-1.2.1-bin/lib/
 
 	echo 'export HIVE_HOME=/opt/hadoop/hive/' >> /etc/bashrc
+	echo 'export HIVE_CONF=/opt/hadoop/hive/conf/' >> /etc/bashrc
 	echo 'export PATH=$PATH:$HIVE_HOME/bin' >> /etc/bashrc
 	source /etc/bashrc
 
@@ -287,11 +346,23 @@ function install_hive {
 	cd $HIVE_HOME
 	mkdir logs
 	chown -R vagrant:vagrant /opt/hadoop/apache-hive-1.2.1-bin
-	chmod +x $DIR/start-hive.sh
-	sudo -u vagrant $DIR/start-hive.sh
+
+	start_hive
+}
+
+function start_zookeeper {
+	cd /opt/hadoop/zookeeper-3.4.6
+	sudo -u vagrant bin/zkServer.sh start	
 }
 
 function install_zookeeper {
+	if [ -d /opt/hadoop/zookeeper-3.4.6 ]; then
+		start_zookeeper
+		return
+	fi
+
+	echo "install zookeeper"
+
 	# zookeeper
 	download_and_untargz \
 		"https://archive.apache.org/dist/zookeeper/zookeeper-3.4.6/zookeeper-3.4.6.tar.gz" \
@@ -305,7 +376,8 @@ function install_zookeeper {
 	cat $DIR/conf/zookeeper/zoo.cfg > conf/zoo.cfg
 	echo '1' > data/myid
 
-	bin/zkServer.sh start
+	chown -R vagrant:vagrant /opt/hadoop/zookeeper-3.4.6
+	start_zookeeper
 }
 
 function install_drill {
@@ -324,11 +396,51 @@ function install_drill {
 	bin/drillbit.sh start
 }
 
+function start_hbase {
+	chmod +x $DIR/start-hbase.sh
+	sudo -u vagrant $DIR/start-hbase.sh
+}
+
 function install_hbase {
 	download_and_untargz \
 		"http://archive.apache.org/dist/hbase/1.1.2/hbase-1.1.2-bin.tar.gz" \
 		hbase-1.1.2-bin.tar.gz \
 		/opt/hadoop
+
+	ln -s /opt/hadoop/hbase-1.1.2/ /opt/hadoop/hbase
+
+	echo 'export HBASE_HOME=/opt/hadoop/hbase' >> /etc/bashrc
+	echo 'export PATH=$PATH:$HBASE_HOME/bin' >> /etc/bashrc
+	source /etc/bashrc
+
+	cat $DIR/conf/hbase/hbase-site.xml > $HBASE_HOME/conf/hbase-site.xml
+
+	cd $HBASE_HOME
+	chown -R vagrant:vagrant /opt/hadoop/hbase-1.1.2/
+
+	start_hbase
+}
+
+function start_kylin {
+	sudo -u vagrant $KYLIN_HOME/bin/kylin.sh start
+}
+
+function install_kylin {
+	download_and_untargz \
+		"https://dist.apache.org/repos/dist/release/kylin/apache-kylin-1.5.2.1/apache-kylin-1.5.2.1-HBase1.x-bin.tar.gz" \
+		apache-kylin-1.5.2.1-HBase1.x-bin.tar.gz \
+		/opt/hadoop
+	
+	ln -s /opt/hadoop/apache-kylin-1.5.2.1-bin/ /opt/hadoop/kylin
+
+	echo 'export KYLIN_HOME=/opt/hadoop/kylin' >> /etc/bashrc
+	echo 'export PATH=$PATH:$KYLIN_HOME/bin' >> /etc/bashrc
+	source /etc/bashrc
+
+	cd $KYLIN_HOME
+	chown -R vagrant:vagrant /opt/hadoop/apache-kylin-1.5.2.1-bin/
+
+	start_kylin
 }
 
 
@@ -347,11 +459,12 @@ install_hadoop
 install_mysql
 install_hive
 install_python
-install_spark
-install_hue
-#install_zookeeper
+#install_spark
+#install_hue
+install_zookeeper
 #install_drill
-#install_hbase
+install_hbase
+install_kylin
 
 # add samples
 sudo -u vagrant $DIR/samples/run.sh
