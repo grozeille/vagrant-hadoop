@@ -20,29 +20,25 @@ App.setConfigs({
 
   /* Environment configurations */
   envDefaults: {
-    version: "0.7.1",
+    version: "0.7.0.2.3.0.0-2557",
     /*
      * By default TEZ UI looks for timeline server at http://localhost:8188, uncomment and change
      * the following value for pointing to a different domain.
      */
+    // timelineBaseUrl: 'http://localhost:8188',
     timelineBaseUrl: 'http://hadoop:8188',
 
     /*
      * By default RM web interface is expected to be at http://localhost:8088, uncomment and change
      * the following value to point to a different domain.
      */
+    // RMWebUrl: 'http://localhost:8088',
     RMWebUrl: 'http://hadoop:8088',
 
     /*
      * Ensures that some of the UI features work with old versions of Tez
      */
     compatibilityMode: false,
-
-    /*
-     * Default time zone for UI display. Set to undefined for local timezone
-     * For configuration see http://momentjs.com/timezone/docs/
-     */
-    //timezone: "UTC",
   },
 
   /*
@@ -80,4 +76,3 @@ App.setConfigs({
   }
 
 });
-

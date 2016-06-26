@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 DIR=/vagrant
 
 if [ ! -d $DIR/cache ]; then
@@ -45,6 +45,7 @@ function install_jdk {
 	alternatives --install /usr/bin/java java /opt/jdk1.8.0_45/bin/java 2
 	alternatives --install /usr/bin/jar jar /opt/jdk1.8.0_45/bin/jar 2
 	alternatives --install /usr/bin/javac javac /opt/jdk1.8.0_45/bin/javac 2
+	alternatives --set java /opt/jdk1.8.0_45/bin/java
 	alternatives --set jar /opt/jdk1.8.0_45/bin/jar
 	alternatives --set javac /opt/jdk1.8.0_45/bin/javac
 
@@ -118,6 +119,12 @@ function install_hadoop {
 		/opt/hadoop
 
 	ln -s /opt/hadoop/hadoop-2.6.0/ /opt/hadoop/hadoop
+
+	yum install -y -d1 snappy snappy-devel
+	ln -s /usr/lib64/libsnappy.so /opt/hadoop/hadoop/lib/native/libsnappy.so
+
+	yum install -y -d1 lzo lzo-devel
+	ln -s /usr/lib64/liblzo2.so /opt/hadoop/hadoop/lib/native/liblzo2.so
 
 	download_and_untargz \
 		"https://archive.apache.org/dist/tez/0.7.1/apache-tez-0.7.1-bin.tar.gz" \
@@ -210,7 +217,7 @@ function install_hue {
 	cat $DIR/conf/hue/hue.ini > /opt/hadoop/hue/desktop/conf/hue.ini
 
 	# configure mysql
-	echo "CREATE USER 'hue'@'%' IDENTIFIED BY 'hue';" > /tmp/init_hue.sql
+	echo "CREATE USER 'hue'@'%' IDENTIFI ED BY 'hue';" > /tmp/init_hue.sql
 	echo "CREATE USER 'hue'@'localhost' IDENTIFIED BY 'hue';" >> /tmp/init_hue.sql
 	echo "CREATE USER 'hue'@'hadoop' IDENTIFIED BY 'hue';" >> /tmp/init_hue.sql
 	echo "CREATE DATABASE hue;" >> /tmp/init_hue.sql
@@ -402,6 +409,14 @@ function start_hbase {
 }
 
 function install_hbase {
+
+	if [ -d /opt/hadoop/hbase-1.1.2 ]; then
+		start_hbase
+		return
+	fi
+
+	echo "install hbase"
+
 	download_and_untargz \
 		"http://archive.apache.org/dist/hbase/1.1.2/hbase-1.1.2-bin.tar.gz" \
 		hbase-1.1.2-bin.tar.gz \
@@ -422,10 +437,19 @@ function install_hbase {
 }
 
 function start_kylin {
-	sudo -u vagrant $KYLIN_HOME/bin/kylin.sh start
+	chmod +x $DIR/start-kylin.sh
+	sudo -u vagrant $DIR/start-kylin.sh
 }
 
 function install_kylin {
+
+	if [ -d /opt/hadoop/apache-kylin-1.5.2.1-bin ]; then
+		start_kylin
+		return
+	fi
+
+	echo "install kylin"
+
 	download_and_untargz \
 		"https://dist.apache.org/repos/dist/release/kylin/apache-kylin-1.5.2.1/apache-kylin-1.5.2.1-HBase1.x-bin.tar.gz" \
 		apache-kylin-1.5.2.1-HBase1.x-bin.tar.gz \
@@ -453,18 +477,139 @@ if [ ! -d /media/data/hadoop ]; then
 fi
 
 yum install -y -d1 wget
+yum install -y -d1 ntp
+chkconfig ntpd on
+/etc/init.d/ntpd start
+
+#chkconfig iptables off
+#service iptables stop
+#setenforce 0
+#echo "SELINUX=disabled" >  /etc/sysconfig/selinux
 
 install_jdk
-install_hadoop
+#install_hadoop
 install_mysql
-install_hive
-install_python
+#install_hive
+#install_python
 #install_spark
 #install_hue
-install_zookeeper
+#install_zookeeper
 #install_drill
-install_hbase
-install_kylin
+#install_hbase
+#install_kylin
 
 # add samples
-sudo -u vagrant $DIR/samples/run.sh
+#sudo -u vagrant $DIR/samples/run.sh
+
+echo never > /sys/kernel/mm/redhat_transparent_hugepage/enabled
+echo never > /sys/kernel/mm/redhat_transparent_hugepage/defrag
+
+
+cd /etc/yum.repos.d/
+wget -nv http://public-repo-1.hortonworks.com/ambari/centos6/2.x/updates/2.2.1.0/ambari.repo
+#yum install -y -d1  ambari-agent
+#ambari-agent start
+yum install -y -d1  ambari-server
+
+exit
+
+yum install -y -d1 postgresql-jdbc
+
+ambari-server setup -j /opt/jdk1.8.0_45/ --silent --jdbc-db=postgres --jdbc-driver=/usr/share/java/postgresql-jdbc.jar
+ambari-server start
+
+yum install -y -d1 ambari-agent
+ambari-agent start
+
+
+echo "CREATE USER hive WITH PASSWORD 'hive';" > /tmp/create_hive_db.sql
+echo "CREATE DATABASE hive OWNER hive;" >> /tmp/create_hive_db.sql
+sudo -u postgres bash -c "psql < /tmp/create_hive_db.sql"
+
+
+echo "host  all  hive 0.0.0.0/0 md5" >> /var/lib/pgsql/data/pg_hba.conf
+/etc/init.d/postgresql restart
+
+
+
+sudo -u hdfs hdfs dfs -mkdir /user/vagrant
+sudo -u hdfs hdfs dfs -chown vagrant:vagrant /user/vagrant
+
+sudo -u hdfs hdfs dfs -mkdir /kylin
+sudo -u hdfs hdfs dfs -chmod 777 /kylin
+
+
+export HIVE_CONF=/etc/hive/conf
+export HCAT_HOME=/usr/hdp/current/hive-webhcat/
+#echo "kylin.hive.client=beeline" >> conf/kylin.properties
+
+
+
+wget https://github.com/OpenTSDB/opentsdb/releases/download/v2.2.0/opentsdb-2.2.0.noarch.rpm
+yum install -y -d1 opentsdb-2.2.0.noarch.rpm
+
+
+echo "tsd.storage.hbase.zk_basedir = /hbase-unsecure" >> /etc/opentsdb/opentsdb.conf
+env COMPRESSION=NONE HBASE_HOME=/usr/hdp/2.4.2.0-258/hbase/ /usr/share/opentsdb/tools/create_table.sh
+/etc/init.d/opentsdb start
+sudo chmod a+w /var/log/opentsdb/queries.log
+sudo chmod a+w /var/log/opentsdb/opentsdb.log
+
+
+
+
+
+sudo yum install -y -d1 initscripts fontconfig
+sudo yum install -y -d1 https://grafanarel.s3.amazonaws.com/builds/grafana-3.0.4-1464167696.x86_64.rpm
+sudo service grafana-server start
+
+####
+
+wget -nv http://public-repo-1.hortonworks.com/HDP/centos6/2.x/updates/2.3.0.0/hdp.repo
+
+# zookeeper
+yum install -y -d1 zookeeper-server
+/usr/hdp/current/zookeeper-server/bin/zookeeper-server start
+
+# hadoop hdfs/yarn
+yum install -y -d1 hadoop hadoop-hdfs hadoop-libhdfs hadoop-yarn hadoop-mapreduce hadoop-client openssl
+yum install -y -d1 snappy snappy-devel
+yum install -y -d1 lzo lzo-devel hadooplzo hadooplzo-native
+# copy hdfs-site.xml & core-site.xml to /etc/hadoop/conf
+hdfs namenode -format
+/usr/hdp/current/hadoop-hdfs-namenode/../hadoop/sbin/hadoop-daemon.sh start namenode
+/usr/hdp/current/hadoop-hdfs-namenode/../hadoop/sbin/hadoop-daemon.sh start datanode
+
+/usr/hdp/current/hadoop-yarn-resourcemanager/sbin/yarn-daemon.sh start resourcemanager
+/usr/hdp/current/hadoop-yarn-nodemanager/sbin/yarn-daemon.sh start nodemanager
+/usr/hdp/current/hadoop-yarn-timelineserver/sbin/yarn-daemon.sh start timelineserver
+
+# tez
+yum install -y -d1 tez
+hdfs dfs -mkdir -p /hdp/apps/2.3.0.0-2557/tez/
+hdfs dfs -put /usr/hdp/2.3.0.0-2557/tez/lib/tez.tar.gz /hdp/apps/2.3.0.0-2557/tez/
+hdfs dfs -chmod -R 555 /hdp/apps/2.3.0.0-2557/tez
+hdfs dfs -chmod -R 444 /hdp/apps/2.3.0.0-2557/tez/tez.tar.gz
+# copy tez-site.xml  to /etc/tez/conf
+
+# download tomcat
+unzip /usr/hdp/2.3.0.0-2557/tez/ui/tez-ui-0.7.0.2.3.0.0-2557.war -d webapps/tez-ui
+# replace conf, start tomcat
+
+
+# hive
+yum install -y -d1 hive-hcatalog mysql-connector-java
+# mysql conf
+# hive-site.xml
+cp /usr/share/java/mysql-connector-java-5.1.17.jar /usr/hdp/current/hive-metastore/lib/
+nohup /usr/hdp/current/hive-metastore/bin/hive --service metastore>/var/log/hive/hive.out 2>/var/log/hive/hive.log &
+nohup /usr/hdp/current/hive-server2/bin/hiveserver2 >/var/log/hive/hiveserver2.out 2> /var/log/hive/hiveserver2.log &
+
+
+
+
+# hbase
+yum install -y -d1 hbase
+# conf hbase-site.xml
+/usr/hdp/current/hbase-master/bin/hbase-daemon.sh start master; sleep 25
+/usr/hdp/current/hbase-regionserver/bin/hbase-daemon.sh start regionserver

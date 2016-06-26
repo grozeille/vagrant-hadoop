@@ -100,3 +100,5 @@ export HADOOP_IDENT_STRING=$USER
 export TEZ_CONF_DIR=/opt/hadoop/tez/conf
 export TEZ_JARS=/opt/hadoop/tez/*:/opt/hadoop/tez/lib/*
 export HADOOP_CLASSPATH=$TEZ_CONF_DIR:$TEZ_JARS:$HADOOP_CLASSPATH
+
+export JAVA_LIBRARY_PATH="/opt/hadoop/hadoop/lib/native"

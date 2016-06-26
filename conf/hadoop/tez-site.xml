@@ -1,17 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>                        
 <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>   
 <configuration>
-    <property>
-        <name>fs.default.name</name>
-        <value>hdfs://hadoop:9000</value>
-      </property>
+    <!--<property>
+         <name>tez.lib.uris</name>
+         <value>/apps/tez/,/apps/tez/lib</value>
+    </property>-->
     <property>
          <name>tez.lib.uris</name>
-         <value>${fs.defaultFS}/apps/tez/,${fs.default.name}/apps/tez/lib</value>
-    </property>
-    <property>
-         <name>tez.use.cluster.hadoop-libs</name>
-         <value>true</value>
+         <value>/hdp/apps/2.3.0.0-2557/tez/tez.tar.gz</value>
     </property>
 
     <property>
