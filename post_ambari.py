@@ -53,9 +53,11 @@ def waitForClusterRequest( requestId ):
     else:
         return True
 
+time.sleep(20)
+
 while True:
   ready = waitForClusterRequest(clusterRequest['Requests']['id'])
-  time.sleep(3)
+  time.sleep(10)
   if ready:
     break
 

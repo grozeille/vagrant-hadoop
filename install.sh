@@ -309,6 +309,7 @@ ambari-server start
 ambari-agent start
 
 
+sleep 5
 
 # install Ambari BluePrint
 /opt/anaconda/bin/python $DIR/post_ambari.py
