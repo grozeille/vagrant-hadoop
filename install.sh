@@ -95,88 +95,6 @@ function install_python {
 	source /etc/bashrc
 }
 
-function start_hadoop {
-	chmod +x $DIR/start-hadoop.sh
-	sudo -u vagrant $DIR/start-hadoop.sh
-}
-
-function install_hadoop {
-	if [ -d /opt/hadoop/hadoop-2.6.0 ]; then
-		start_hadoop
-		return
-	fi
-	echo "install hadoop"
-
-	# install hadoop
-	chmod +x $DIR/setup-ssh.sh
-	sudo -u vagrant $DIR/setup-ssh.sh
-
-	sysctl -w vm.swappiness=0 
-
-	download_and_untargz \
-		"https://archive.apache.org/dist/hadoop/common/hadoop-2.6.0/hadoop-2.6.0.tar.gz" \
-		hadoop-2.6.0.tar.gz \
-		/opt/hadoop
-
-	ln -s /opt/hadoop/hadoop-2.6.0/ /opt/hadoop/hadoop
-
-	yum install -y -d1 snappy snappy-devel
-	ln -s /usr/lib64/libsnappy.so /opt/hadoop/hadoop/lib/native/libsnappy.so
-
-	yum install -y -d1 lzo lzo-devel
-	ln -s /usr/lib64/liblzo2.so /opt/hadoop/hadoop/lib/native/liblzo2.so
-
-	download_and_untargz \
-		"https://archive.apache.org/dist/tez/0.7.1/apache-tez-0.7.1-bin.tar.gz" \
-		apache-tez-0.7.1-bin.tar.gz \
-		/opt/hadoop
-
-	ln -s /opt/hadoop/apache-tez-0.7.1-bin/ /opt/hadoop/tez
-
-	# tez ui
-	download_and_untargz \
-		"http://archive.apache.org/dist/tomcat/tomcat-8/v8.5.2/bin/apache-tomcat-8.5.2.tar.gz" \
-		apache-tomcat-8.5.2.tar.gz \
-		/opt/hadoop/tez
-
-	mkdir /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui
-	unzip /opt/hadoop/tez/tez-ui-0.7.1.war -d /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui
-	cat $DIR/conf/hadoop/server.xml > /opt/hadoop/tez/apache-tomcat-8.5.2/conf/server.xml
-	cat $DIR/conf/hadoop/config.js > /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui/scripts/config.js
-
-
-	echo 'export HADOOP_HOME=/opt/hadoop/hadoop' >> /etc/bashrc
-	echo 'export PATH=$PATH:/opt/hadoop/hadoop/bin' >> /etc/bashrc
-	echo 'export HADOOP_CONF_DIR=/opt/hadoop/hadoop/etc/hadoop' >> /etc/bashrc
-	echo 'export TEZ_HOME=/opt/hadoop/tez' >> /etc/bashrc
-	source /etc/bashrc
-
-	mkdir /opt/hadoop/data
-	chmod a+w /opt/hadoop/data
-
-	cat $DIR/conf/hadoop/hdfs-site.xml > $HADOOP_HOME/etc/hadoop/hdfs-site.xml
-
-	cat $DIR/conf/hadoop/core-site.xml > $HADOOP_HOME/etc/hadoop/core-site.xml
-
-	cat $DIR/conf/hadoop/hadoop-env.sh > $HADOOP_HOME/etc/hadoop/hadoop-env.sh
-
-	cat $DIR/conf/hadoop/httpfs-site.xml > $HADOOP_HOME/etc/hadoop/httpfs-site.xml
-
-	cat $DIR/conf/hadoop/yarn-site.xml > $HADOOP_HOME/etc/hadoop/yarn-site.xml
-
-	cat $DIR/conf/hadoop/mapred-site.xml > $HADOOP_HOME/etc/hadoop/mapred-site.xml
-
-	mkdir $TEZ_HOME/conf
-	cat $DIR/conf/hadoop/tez-site.xml > $TEZ_HOME/conf/tez-site.xml
-
-	chown -R vagrant:vagrant /opt/hadoop/hadoop-2.6.0/
-	chown -R vagrant:vagrant /opt/hadoop/apache-tez-0.7.1-bin/
-	chown -R vagrant:vagrant /opt/hadoop/apache-tomcat-8.5.2/
-
-	sudo -u vagrant bash -c 'source /etc/bashrc; hadoop namenode -format'
-
-	start_hadoop
-}
 
 function start_hue {
 	chmod +x $DIR/start-hue.sh
@@ -268,124 +186,6 @@ function install_hue {
 	start_hue
 }
 
-function start_spark {
-	chmod +x $DIR/start-spark.sh
-	sudo -u vagrant $DIR/start-spark.sh
-}
-
-function install_spark {
-	if [ -d /opt/hadoop/spark-1.6.1-bin-hadoop2.6/ ]; then
-		start_spark
-		return
-	fi
-	echo "install spark"
-
-	# spark
-	download_and_untargz \
-		"http://archive.apache.org/dist/spark/spark-1.6.1/spark-1.6.1-bin-hadoop2.6.tgz" \
-		spark-1.6.1-bin-hadoop2.6.tgz \
-		/opt/hadoop
-
-	ln -s /opt/hadoop/spark-1.6.1-bin-hadoop2.6/ /opt/hadoop/spark
-
-	echo 'export SPARK_HOME=/opt/hadoop/spark' >> /etc/bashrc
-	echo 'export PATH=$PATH:$SPARK_HOME/bin' >> /etc/bashrc
-	echo 'export PYSPARK_PYTHON=$PYTHON_HOME/bin/python' >> /etc/bashrc
-	echo 'export PYSPARK_DRIVER_PYTHON=$PYTHON_HOME/bin/python' >> /etc/bashrc
-	echo 'export PYTHONPATH="$SPARK_HOME/python/:$SPARK_HOME/python/lib/py4j-0.9-src.zip:$PYTHONPATH"' >> /etc/bashrc
-	source /etc/bashrc
-
-	cat $DIR/conf/spark/spark-env.sh > $SPARK_HOME/conf/spark-env.sh
-
-	if [ -d "$HIVE_HOME" ]; then
-		cat $DIR/conf/spark/hive-site.xml > $SPARK_HOME/conf/hive-site.xml
-	fi
-
-	chown -R vagrant:vagrant /opt/hadoop/spark-1.6.1-bin-hadoop2.6/
-
-	start_spark
-}
-
-function start_hive {
-	chmod +x $DIR/start-hive.sh
-	sudo -u vagrant $DIR/start-hive.sh
-}
-
-function install_hive {
-	if [ -d /opt/hadoop/apache-hive-1.2.1-bin ]; then
-		start_hive
-		return
-	fi
-
-	echo "install hive"
-
-	echo "CREATE USER 'hive'@'%' IDENTIFIED BY 'hive';" > /tmp/init_hive.sql
-	echo "CREATE USER 'hive'@'localhost' IDENTIFIED BY 'hive';" >> /tmp/init_hive.sql
-	echo "CREATE USER 'hive'@'hadoop' IDENTIFIED BY 'hive';" >> /tmp/init_hive.sql
-	echo "CREATE DATABASE hive;" >> /tmp/init_hive.sql
-	echo "GRANT ALL ON hive.* TO 'hive'@'%';" >> /tmp/init_hive.sql
-	echo "FLUSH PRIVILEGES;" >> /tmp/init_hive.sql
-	
-	mysql -u root < /tmp/init_hive.sql
-
-	# install hive
-
-	download_and_untargz \
-		"https://archive.apache.org/dist/hive/hive-1.2.1/apache-hive-1.2.1-bin.tar.gz" \
-		apache-hive-1.2.1-bin.tar.gz \
-		/opt/hadoop
-
-	ln -s /opt/hadoop/apache-hive-1.2.1-bin/ /opt/hadoop/hive
-	
-	download_and_untargz \
-		"http://cdn.mysql.com/Downloads/Connector-J/mysql-connector-java-5.0.8.tar.gz" \
-		mysql-connector-java-5.0.8.tar.gz \
-		/opt/hadoop
-	cp /opt/hadoop/mysql-connector-java-5.0.8/mysql-connector-java-5.0.8-bin.jar /opt/hadoop/apache-hive-1.2.1-bin/lib/
-
-	echo 'export HIVE_HOME=/opt/hadoop/hive/' >> /etc/bashrc
-	echo 'export HIVE_CONF=/opt/hadoop/hive/conf/' >> /etc/bashrc
-	echo 'export PATH=$PATH:$HIVE_HOME/bin' >> /etc/bashrc
-	source /etc/bashrc
-
-	cat $DIR/conf/hive/hive-site.xml > $HIVE_HOME/conf/hive-site.xml
-
-	cd $HIVE_HOME
-	mkdir logs
-	chown -R vagrant:vagrant /opt/hadoop/apache-hive-1.2.1-bin
-
-	start_hive
-}
-
-function start_zookeeper {
-	cd /opt/hadoop/zookeeper-3.4.6
-	sudo -u vagrant bin/zkServer.sh start	
-}
-
-function install_zookeeper {
-	if [ -d /opt/hadoop/zookeeper-3.4.6 ]; then
-		start_zookeeper
-		return
-	fi
-
-	echo "install zookeeper"
-
-	# zookeeper
-	download_and_untargz \
-		"https://archive.apache.org/dist/zookeeper/zookeeper-3.4.6/zookeeper-3.4.6.tar.gz" \
-		zookeeper-3.4.6.tar.gz \
-		/opt/hadoop
-
-	cd /opt/hadoop/zookeeper-3.4.6
-
-	mkdir data
-
-	cat $DIR/conf/zookeeper/zoo.cfg > conf/zoo.cfg
-	echo '1' > data/myid
-
-	chown -R vagrant:vagrant /opt/hadoop/zookeeper-3.4.6
-	start_zookeeper
-}
 
 function install_drill {
 	# drill
@@ -403,38 +203,6 @@ function install_drill {
 	bin/drillbit.sh start
 }
 
-function start_hbase {
-	chmod +x $DIR/start-hbase.sh
-	sudo -u vagrant $DIR/start-hbase.sh
-}
-
-function install_hbase {
-
-	if [ -d /opt/hadoop/hbase-1.1.2 ]; then
-		start_hbase
-		return
-	fi
-
-	echo "install hbase"
-
-	download_and_untargz \
-		"http://archive.apache.org/dist/hbase/1.1.2/hbase-1.1.2-bin.tar.gz" \
-		hbase-1.1.2-bin.tar.gz \
-		/opt/hadoop
-
-	ln -s /opt/hadoop/hbase-1.1.2/ /opt/hadoop/hbase
-
-	echo 'export HBASE_HOME=/opt/hadoop/hbase' >> /etc/bashrc
-	echo 'export PATH=$PATH:$HBASE_HOME/bin' >> /etc/bashrc
-	source /etc/bashrc
-
-	cat $DIR/conf/hbase/hbase-site.xml > $HBASE_HOME/conf/hbase-site.xml
-
-	cd $HBASE_HOME
-	chown -R vagrant:vagrant /opt/hadoop/hbase-1.1.2/
-
-	start_hbase
-}
 
 function start_kylin {
 	chmod +x $DIR/start-kylin.sh
@@ -487,54 +255,102 @@ chkconfig ntpd on
 #echo "SELINUX=disabled" >  /etc/sysconfig/selinux
 
 install_jdk
-#install_hadoop
-install_mysql
-#install_hive
-#install_python
-#install_spark
+install_python
 #install_hue
-#install_zookeeper
 #install_drill
-#install_hbase
 #install_kylin
-
-# add samples
-#sudo -u vagrant $DIR/samples/run.sh
 
 echo never > /sys/kernel/mm/redhat_transparent_hugepage/enabled
 echo never > /sys/kernel/mm/redhat_transparent_hugepage/defrag
 
-
-cd /etc/yum.repos.d/
-wget -nv http://public-repo-1.hortonworks.com/ambari/centos6/2.x/updates/2.2.1.0/ambari.repo
-#yum install -y -d1  ambari-agent
-#ambari-agent start
-yum install -y -d1  ambari-server
-
-exit
-
-yum install -y -d1 postgresql-jdbc
-
-ambari-server setup -j /opt/jdk1.8.0_45/ --silent --jdbc-db=postgres --jdbc-driver=/usr/share/java/postgresql-jdbc.jar
-ambari-server start
-
-yum install -y -d1 ambari-agent
-ambari-agent start
-
+# install postgresql for Hive/Ambari
+yum install -y -d1 postgresql-server postgresql-jdbc
+service postgresql initdb
+service postgresql start
 
 echo "CREATE USER hive WITH PASSWORD 'hive';" > /tmp/create_hive_db.sql
 echo "CREATE DATABASE hive OWNER hive;" >> /tmp/create_hive_db.sql
 sudo -u postgres bash -c "psql < /tmp/create_hive_db.sql"
 
-
 echo "host  all  hive 0.0.0.0/0 md5" >> /var/lib/pgsql/data/pg_hba.conf
 /etc/init.d/postgresql restart
 
+# install ambari
+cd /etc/yum.repos.d/
+wget -nv http://public-repo-1.hortonworks.com/ambari/centos6/2.x/updates/2.2.1.0/ambari.repo
+
+yum install -y -d1 ambari-server ambari-agent
+
+ambari-server setup -j /opt/jdk1.8.0_45/ --silent
+ambari-server setup --silent --jdbc-db=postgres --jdbc-driver=/usr/share/java/postgresql-jdbc.jar
+
+# install additional Hawq ambari stack
+HDB_AMBARI_DOWNLOAD_LOC=https://www.dropbox.com/s/6ik8f3r472f7mzq/hdb-ambari-plugin-2.0.0-448.tar.gz
+HDB_DOWNLOAD_LOC=https://www.dropbox.com/s/5rzhqxajbd5pq9k/hdb-2.0.0.0-22126.tar.gz
+
+mkdir -p /tmp/hawqsetup
+cd /tmp/hawqsetup
+
+wget -nv ${HDB_DOWNLOAD_LOC}
+wget -nv ${HDB_AMBARI_DOWNLOAD_LOC}
+tar -xvzf /tmp/hawqsetup/hdb-2.0.0.0-*.tar.gz -C /tmp/hawqsetup
+tar -xvzf /tmp/hawqsetup/hdb-ambari-plugin-2.0.0-*.tar.gz -C /tmp/hawqsetup
+yum install -y httpd
+service httpd start
+chkconfig httpd on
+cd /tmp/hawqsetup/hdb*
+./setup_repo.sh
+cd /tmp/hawqsetup/hdb-ambari-plugin*
+./setup_repo.sh  
+yum install -y -d1 hdb-ambari-plugin
+
+# start ambari
+ambari-server start
+ambari-agent start
 
 
-sudo -u hdfs hdfs dfs -mkdir /user/vagrant
-sudo -u hdfs hdfs dfs -chown vagrant:vagrant /user/vagrant
 
+# install Ambari BluePrint
+/opt/anaconda/bin/python $DIR/post_ambari.py
+
+# prepare HDFS for user vagrant
+sudo -u hdfs hdfs dfs -mkdir -p /user/vagrant/
+sudo -u hdfs hdfs dfs -chown -R vagrant /user/vagrant
+
+# prepare Hawq
+
+echo "CREATE DATABASE gpadmin OWNER gpadmin;" > /tmp/create_gpadmin_db.sql
+sudo -u gpadmin bash -c "source /usr/local/hawq/greenplum_path.sh; psql -d template1 -p 10432 -h localhost < /tmp/create_gpadmin_db.sql"
+
+
+# Jupyter
+export LC_ALL=C; /opt/anaconda/bin/pip install plotly
+sudo -u vagrant mkdir -p /home/vagrant/.ipython/kernels/pyspark/
+sudo -u vagrant touch /home/vagrant/.ipython/kernels/pyspark/kernel.json
+cat $DIR/conf/jupyter/kernel.json > /home/vagrant/.ipython/kernels/pyspark/kernel.json
+
+#sudo -u vagrant $DIR/samples/run.sh
+
+# to export notebook as pdf
+#yum -y -d1 install texlive texlive-latex-extra pandoc texlive-latex 
+
+exit
+
+# tez ui
+download_and_untargz \
+	"http://archive.apache.org/dist/tomcat/tomcat-8/v8.5.2/bin/apache-tomcat-8.5.2.tar.gz" \
+	apache-tomcat-8.5.2.tar.gz \
+	/opt/hadoop/tez
+
+mkdir /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui
+unzip /opt/hadoop/tez/tez-ui-0.7.1.war -d /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui
+cat $DIR/conf/hadoop/server.xml > /opt/hadoop/tez/apache-tomcat-8.5.2/conf/server.xml
+cat $DIR/conf/hadoop/config.js > /opt/hadoop/tez/apache-tomcat-8.5.2/webapps/tez-ui/scripts/config.js
+
+
+
+
+# install Kylin
 sudo -u hdfs hdfs dfs -mkdir /kylin
 sudo -u hdfs hdfs dfs -chmod 777 /kylin
 
@@ -544,9 +360,8 @@ export HCAT_HOME=/usr/hdp/current/hive-webhcat/
 #echo "kylin.hive.client=beeline" >> conf/kylin.properties
 
 
-
-wget https://github.com/OpenTSDB/opentsdb/releases/download/v2.2.0/opentsdb-2.2.0.noarch.rpm
-yum install -y -d1 opentsdb-2.2.0.noarch.rpm
+# install opentsdb
+yum install -y -d1 https://github.com/OpenTSDB/opentsdb/releases/download/v2.2.0/opentsdb-2.2.0.noarch.rpm
 
 
 echo "tsd.storage.hbase.zk_basedir = /hbase-unsecure" >> /etc/opentsdb/opentsdb.conf
@@ -556,60 +371,8 @@ sudo chmod a+w /var/log/opentsdb/queries.log
 sudo chmod a+w /var/log/opentsdb/opentsdb.log
 
 
-
-
-
+# install grafana
 sudo yum install -y -d1 initscripts fontconfig
 sudo yum install -y -d1 https://grafanarel.s3.amazonaws.com/builds/grafana-3.0.4-1464167696.x86_64.rpm
 sudo service grafana-server start
 
-####
-
-wget -nv http://public-repo-1.hortonworks.com/HDP/centos6/2.x/updates/2.3.0.0/hdp.repo
-
-# zookeeper
-yum install -y -d1 zookeeper-server
-/usr/hdp/current/zookeeper-server/bin/zookeeper-server start
-
-# hadoop hdfs/yarn
-yum install -y -d1 hadoop hadoop-hdfs hadoop-libhdfs hadoop-yarn hadoop-mapreduce hadoop-client openssl
-yum install -y -d1 snappy snappy-devel
-yum install -y -d1 lzo lzo-devel hadooplzo hadooplzo-native
-# copy hdfs-site.xml & core-site.xml to /etc/hadoop/conf
-hdfs namenode -format
-/usr/hdp/current/hadoop-hdfs-namenode/../hadoop/sbin/hadoop-daemon.sh start namenode
-/usr/hdp/current/hadoop-hdfs-namenode/../hadoop/sbin/hadoop-daemon.sh start datanode
-
-/usr/hdp/current/hadoop-yarn-resourcemanager/sbin/yarn-daemon.sh start resourcemanager
-/usr/hdp/current/hadoop-yarn-nodemanager/sbin/yarn-daemon.sh start nodemanager
-/usr/hdp/current/hadoop-yarn-timelineserver/sbin/yarn-daemon.sh start timelineserver
-
-# tez
-yum install -y -d1 tez
-hdfs dfs -mkdir -p /hdp/apps/2.3.0.0-2557/tez/
-hdfs dfs -put /usr/hdp/2.3.0.0-2557/tez/lib/tez.tar.gz /hdp/apps/2.3.0.0-2557/tez/
-hdfs dfs -chmod -R 555 /hdp/apps/2.3.0.0-2557/tez
-hdfs dfs -chmod -R 444 /hdp/apps/2.3.0.0-2557/tez/tez.tar.gz
-# copy tez-site.xml  to /etc/tez/conf
-
-# download tomcat
-unzip /usr/hdp/2.3.0.0-2557/tez/ui/tez-ui-0.7.0.2.3.0.0-2557.war -d webapps/tez-ui
-# replace conf, start tomcat
-
-
-# hive
-yum install -y -d1 hive-hcatalog mysql-connector-java
-# mysql conf
-# hive-site.xml
-cp /usr/share/java/mysql-connector-java-5.1.17.jar /usr/hdp/current/hive-metastore/lib/
-nohup /usr/hdp/current/hive-metastore/bin/hive --service metastore>/var/log/hive/hive.out 2>/var/log/hive/hive.log &
-nohup /usr/hdp/current/hive-server2/bin/hiveserver2 >/var/log/hive/hiveserver2.out 2> /var/log/hive/hiveserver2.log &
-
-
-
-
-# hbase
-yum install -y -d1 hbase
-# conf hbase-site.xml
-/usr/hdp/current/hbase-master/bin/hbase-daemon.sh start master; sleep 25
-/usr/hdp/current/hbase-regionserver/bin/hbase-daemon.sh start regionserver

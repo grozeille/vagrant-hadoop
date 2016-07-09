@@ -53,6 +53,7 @@ Vagrant.configure(2) do |config|
   #   # Customize the amount of memory on the VM:
     #vb.memory = "4096"
     vb.memory = "8192"
+    #vb.memory = "6114"
 
     if !File.exist?("disk/hadoop.vdi")
        vb.customize [

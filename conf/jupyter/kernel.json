@@ -1,0 +1,19 @@
+{
+ "display_name": "PySpark (Spark 1.6.1)",
+ "language": "python",
+ "argv": [
+  "/opt/anaconda/bin/python",
+  "-m",
+  "ipykernel",
+  "-f",
+  "{connection_file}"
+ ],
+ "env": {
+  "SPARK_HOME": "/usr/hdp/current/spark-client",
+  "PYTHONPATH": "/usr/hdp/current/spark-client/python/:/usr/hdp/current/spark-client/python/lib/py4j-0.9-src.zip",
+  "PYTHONSTARTUP": "/usr/hdp/current/spark-client/python/pyspark/shell.py",
+  "PYSPARK_SUBMIT_ARGS": "--master local[*] pyspark-shell",
+  "PYSPARK_PYTHON": "/opt/anaconda/bin/python",
+  "PYSPARK_DRIVER_PYTHON": "/opt/anaconda/bin/python"
+ }
+}
