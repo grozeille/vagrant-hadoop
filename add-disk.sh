@@ -1,5 +1,4 @@
 set -e
-set -x
 
 if [ -f /etc/disk_added_date ] ; then
    echo "disk already added so exiting."

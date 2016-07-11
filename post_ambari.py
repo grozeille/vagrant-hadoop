@@ -16,6 +16,28 @@ with open('/vagrant/conf/ambari_cluster.json', 'r') as content_file:
 
 headers = { 'X-Requested-By': 'vagrant'}
 
+def checkForAmbari():
+    "wait for ambari to be ready"
+    print "Wait for ambari to be ready"   
+    try:
+        r = requests.get('http://localhost:8080/api/v1/clusters', auth=(user, password))
+        if r.status_code != 200:
+            print "Status code" + str(r.status_code)
+            return False
+        else:
+            return True
+    except:
+        print("Unexpected error:", sys.exc_info()[0])
+        return False
+
+while True:
+  ready = checkForAmbari()
+  time.sleep(5)
+  if ready:
+    break
+
+print "Ambari Ready"
+
 r = requests.post('http://localhost:8080/api/v1/blueprints/blueprint-simple', auth=(user, password), data=json.dumps(blueprint), headers=headers)
 
 if r.status_code != 201:
@@ -41,7 +63,7 @@ if clusterRequest['Requests']['status'] != 'Accepted':
     sys.exit(1)
 
 
-def waitForClusterRequest( requestId ):
+def checkForClusterRequest( requestId ):
     "wait for cluster to be ready"
     print "Wait for cluster to be ready"   
     r = requests.get('http://localhost:8080/api/v1/clusters/DEV/requests/'+str(requestId), auth=(user, password))
@@ -56,7 +78,7 @@ def waitForClusterRequest( requestId ):
 time.sleep(20)
 
 while True:
-  ready = waitForClusterRequest(clusterRequest['Requests']['id'])
+  ready = checkForClusterRequest(clusterRequest['Requests']['id'])
   time.sleep(10)
   if ready:
     break

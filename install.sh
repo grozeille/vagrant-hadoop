@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 DIR=/vagrant
 
 if [ ! -d $DIR/cache ]; then
@@ -308,11 +308,8 @@ yum install -y -d1 hdb-ambari-plugin
 ambari-server start
 ambari-agent start
 
-
-sleep 5
-
 # install Ambari BluePrint
-/opt/anaconda/bin/python $DIR/post_ambari.py
+/opt/anaconda/bin/python $DIR/post_ambari.py | tee /tmp/post_ambari.log
 
 # prepare HDFS for user vagrant
 sudo -u hdfs hdfs dfs -mkdir -p /user/vagrant/
